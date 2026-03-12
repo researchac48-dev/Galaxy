@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>AI Knowledge Galaxy</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    overflow: hidden;
+    font-family: 'Share Tech Mono', monospace;
+    color: #00ffcc;
+    touch-action: none;
+  }
+
+  #canvas3d {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 1;
+  }
+
+  /* ── HUD overlay ── */
+  #hud {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  /* corner brackets */
+  .corner { position: absolute; width: 40px; height: 40px; opacity: .6; }
+  .corner svg { width: 100%; height: 100%; }
+  .tl { top: 16px; left: 16px; }
+  .tr { top: 16px; right: 16px; transform: scaleX(-1); }
+  .bl { bottom: 16px; left: 16px; transform: scaleY(-1); }
+  .br { bottom: 16px; right: 16px; transform: scale(-1); }
+
+  #title-bar {
+    position: absolute;
+    top: 20px; left: 50%; transform: translateX(-50%);
+    text-align: center;
+    letter-spacing: .18em;
+  }
+  #title-bar h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(11px, 2.2vw, 18px);
+    font-weight: 900;
+    color: #00ffcc;
+    text-shadow: 0 0 12px #00ffcc88;
+  }
+  #title-bar p {
+    font-size: clamp(8px, 1.4vw, 11px);
+    color: #00ffcc66;
+    margin-top: 3px;
+    letter-spacing: .25em;
+  }
+
+  #status-bar {
+    position: absolute;
+    bottom: 24px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 20px; align-items: center;
+  }
+  .stat {
+    display: flex; flex-direction: column; align-items: center;
+    font-size: 9px; letter-spacing: .15em; color: #00ffcc88;
+  }
+  .stat span { font-size: 13px; color: #00ffcc; font-weight: bold; }
+
+  #gesture-label {
+    position: absolute;
+    top: 50%; left: 50%; transform: translate(-50%,-50%);
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(14px, 3vw, 22px);
+    letter-spacing: .3em;
+    color: #00ffcc;
+    text-shadow: 0 0 20px #00ffcc;
+    opacity: 0;
+    transition: opacity .3s;
+    pointer-events: none;
+  }
+
+  /* ── camera feed (small PiP) ── */
+  #cam-wrap {
+    position: fixed;
+    bottom: 70px; right: 16px;
+    width: clamp(100px, 18vw, 150px);
+    z-index: 20;
+    border: 1px solid #00ffcc44;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 0 16px #00ffcc22;
+  }
+  #cam-label {
+    background: #00ffcc22;
+    font-size: 8px; letter-spacing: .2em;
+    padding: 2px 6px;
+    color: #00ffcc99;
+    text-align: center;
+  }
+  #videoEl {
+    width: 100%; display: block;
+    transform: scaleX(-1); /* mirror */
+    opacity: .85;
+  }
+  #handCanvas {
+    position: absolute;
+    top: 20px; left: 0;
+    width: 100%; height: calc(100% - 20px);
+    transform: scaleX(-1);
+  }
+
+  /* ── start screen ── */
+  #start-screen {
+    position: fixed;
+    inset: 0; z-index: 100;
+    background: #000a;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px;
+    backdrop-filter: blur(8px);
+  }
+  #start-screen h2 {
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(18px, 5vw, 36px);
+    color: #00ffcc;
+    text-shadow: 0 0 30px #00ffcc;
+    letter-spacing: .2em;
+    text-align: center;
+    padding: 0 20px;
+  }
+  #start-screen p {
+    font-size: clamp(10px, 2vw, 14px);
+    color: #00ffcc88;
+    letter-spacing: .15em;
+    text-align: center;
+    max-width: 400px;
+    padding: 0 20px;
+    line-height: 1.8;
+  }
+  #start-btn {
+    margin-top: 12px;
+    padding: 14px 40px;
+    background: transparent;
+    border: 1px solid #00ffcc;
+    color: #00ffcc;
+    font-family: 'Orbitron', monospace;
+    font-size: clamp(12px, 2.5vw, 16px);
+    letter-spacing: .25em;
+    cursor: pointer;
+    transition: all .25s;
+    box-shadow: 0 0 20px #00ffcc44;
+  }
+  #start-btn:hover, #start-btn:active {
+    background: #00ffcc22;
+    box-shadow: 0 0 40px #00ffcc88;
+  }
+
+  /* scan-line effect */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0,255,204,.018) 2px, rgba(0,255,204,.018) 4px
+    );
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  #finger-dot {
+    position: fixed;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #fff 0%, #00ffcc 50%, transparent 100%);
+    box-shadow: 0 0 20px #00ffcc, 0 0 40px #00ffcc44;
+    pointer-events: none;
+    z-index: 50;
+    transform: translate(-50%, -50%);
+    display: none;
+    transition: left .04s linear, top .04s linear;
+  }
+</style>
+</head>
+<body>
+
+<!-- 3D canvas -->
+<canvas id="canvas3d"></canvas>
+
+<!-- Finger cursor dot -->
+<div id="finger-dot"></div>
+
+<!-- HUD -->
+<div id="hud">
+  <!-- corner brackets -->
+  <div class="corner tl"><svg viewBox="0 0 40 40" fill="none"><path d="M0 40 L0 0 L40 0" stroke="#00ffcc" stroke-width="2"/></svg></div>
+  <div class="corner tr"><svg viewBox="0 0 40 40" fill="none"><path d="M0 40 L0 0 L40 0" stroke="#00ffcc" stroke-width="2"/></svg></div>
+  <div class="corner bl"><svg viewBox="0 0 40 40" fill="none"><path d="M0 40 L0 0 L40 0" stroke="#00ffcc" stroke-width="2"/></svg></div>
+  <div class="corner br"><svg viewBox="0 0 40 40" fill="none"><path d="M0 40 L0 0 L40 0" stroke="#00ffcc" stroke-width="2"/></svg></div>
+
+  <div id="title-bar">
+    <h1>AI KNOWLEDGE GALAXY</h1>
+    <p>NEURAL SPACE INTERFACE v1.0</p>
+  </div>
+
+  <div id="gesture-label">INITIALIZING...</div>
+
+  <div id="status-bar">
+    <div class="stat">STARS<span id="stat-stars">0</span></div>
+    <div class="stat">FPS<span id="stat-fps">--</span></div>
+    <div class="stat">HAND<span id="stat-hand">OFF</span></div>
+    <div class="stat">MODE<span id="stat-mode">FREE</span></div>
+  </div>
+</div>
+
+<!-- Camera PiP -->
+<div id="cam-wrap">
+  <div id="cam-label">HAND SENSOR</div>
+  <video id="videoEl" autoplay playsinline muted></video>
+  <canvas id="handCanvas"></canvas>
+</div>
+
+<!-- Start screen -->
+<div id="start-screen">
+  <h2>AI KNOWLEDGE<br>GALAXY</h2>
+  <p>
+    Gesture-controlled 3D star field.<br>
+    Point your index finger at the camera<br>
+    to rotate and explore the galaxy.
+  </p>
+  <p style="color:#00ffcc44; font-size:10px;">
+    CAMERA PERMISSION REQUIRED<br>
+    FRONT CAMERA · MEDIAPIPE HANDS · THREE.JS
+  </p>
+  <button id="start-btn" onclick="startApp()">▶ LAUNCH GALAXY</button>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     SCRIPTS  — load order matters
+     ════════════════════════════════════════════════ -->
+
+<!-- Three.js r128 from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<!-- MediaPipe Hands + Drawing Utils -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  AI KNOWLEDGE GALAXY  –  Main Script
+//  Structure:
+//    1. Constants & state
+//    2. Three.js galaxy setup
+//    3. Animation loop
+//    4. MediaPipe hand tracking
+//    5. Gesture logic
+//    6. HUD updates
+//    7. App entry point
+// ════════════════════════════════════════════════════════════════
+
+// ── 1. CONSTANTS & STATE ─────────────────────────────────────────
+const NUM_STARS       = 6000;   // total star particles
+const NUM_NEBULA      = 800;    // coloured cloud particles
+const ROTATION_SPEED  = 0.0008; // auto-spin when no hand
+const FINGER_SENS     = 2.2;    // how strongly finger moves galaxy
+const ZOOM_SPEED      = 0.04;
+
+const state = {
+  fingerX: 0.5, fingerY: 0.5,   // normalised [0,1] MediaPipe coords
+  prevFingerX: 0.5, prevFingerY: 0.5,
+  handDetected: false,
+  pinchDistance: null,           // for zoom gesture
+  gestureMode: 'FREE',
+  fps: 0,
+  lastFrameTime: performance.now(),
+  frameCount: 0,
+  fpsTimer: 0,
+};
+
+// Accumulated rotation & zoom
+let rotX = 0, rotY = 0, camZ = 180;
+
+// ── 2. THREE.JS SETUP ────────────────────────────────────────────
+const canvas3d  = document.getElementById('canvas3d');
+const renderer  = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x000005);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+camera.position.z = camZ;
+
+// Handle resize
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ── Galaxy pivot (we rotate this instead of moving the camera) ──
+const galaxyGroup = new THREE.Group();
+scene.add(galaxyGroup);
+
+// ── Stars (white / blue-white) ──────────────────────────────────
+function buildStars() {
+  const positions = new Float32Array(NUM_STARS * 3);
+  const colors    = new Float32Array(NUM_STARS * 3);
+  const sizes     = new Float32Array(NUM_STARS);
+
+  const starColors = [
+    new THREE.Color(0xffffff),
+    new THREE.Color(0xaaddff),
+    new THREE.Color(0xffeebb),
+    new THREE.Color(0x88ccff),
+    new THREE.Color(0x00ffcc),
+  ];
+
+  for (let i = 0; i < NUM_STARS; i++) {
+    // Spiral galaxy distribution
+    const arm    = Math.floor(Math.random() * 3);        // 3 arms
+    const angle  = (arm / 3) * Math.PI * 2 + Math.random() * 0.8;
+    const radius = Math.pow(Math.random(), 0.6) * 120 + 5;
+    const spiral = angle + radius * 0.022;               // twist
+
+    const spread = (1 - radius / 130) * 8 + 2;
+    positions[i * 3]     = Math.cos(spiral) * radius + (Math.random() - .5) * spread;
+    positions[i * 3 + 1] = (Math.random() - .5) * (radius * 0.08 + 3);
+    positions[i * 3 + 2] = Math.sin(spiral) * radius + (Math.random() - .5) * spread;
+
+    const c = starColors[Math.floor(Math.random() * starColors.length)];
+    colors[i * 3]     = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+
+    sizes[i] = Math.random() * 2.5 + 0.5;
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color',    new THREE.BufferAttribute(colors,    3));
+  geo.setAttribute('size',     new THREE.BufferAttribute(sizes,     1));
+
+  // Custom glowing star material
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime:  { value: 0 },
+      uPixelRatio: { value: renderer.getPixelRatio() },
+    },
+    vertexShader: `
+      attribute float size;
+      attribute vec3 color;
+      varying vec3 vColor;
+      uniform float uTime;
+      uniform float uPixelRatio;
+      void main(){
+        vColor = color;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        // twinkle: slightly vary size with time + position hash
+        float twinkle = 0.8 + 0.2 * sin(uTime * 2.0 + position.x * 13.7 + position.z * 7.3);
+        gl_PointSize = size * twinkle * uPixelRatio * (300.0 / -mv.z);
+        gl_Position  = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      void main(){
+        float d = distance(gl_PointCoord, vec2(0.5));
+        if(d > 0.5) discard;
+        float glow = 1.0 - d * 2.0;
+        glow = pow(glow, 1.8);
+        gl_FragColor = vec4(vColor * glow + vec3(0.3) * pow(glow, 4.0), glow);
+      }
+    `,
+    transparent: true,
+    vertexColors: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+
+  const points = new THREE.Points(geo, mat);
+  galaxyGroup.add(points);
+  return mat; // return so we can update uTime
+}
+
+// ── Nebula cloud (coloured fog particles) ───────────────────────
+function buildNebula() {
+  const positions = new Float32Array(NUM_NEBULA * 3);
+  const colors    = new Float32Array(NUM_NEBULA * 3);
+
+  const nebulaColors = [
+    new THREE.Color(0x003366),
+    new THREE.Color(0x006633),
+    new THREE.Color(0x330066),
+    new THREE.Color(0x004444),
+    new THREE.Color(0x003300),
+  ];
+
+  for (let i = 0; i < NUM_NEBULA; i++) {
+    const arm    = Math.floor(Math.random() * 3);
+    const angle  = (arm / 3) * Math.PI * 2;
+    const radius = Math.random() * 100 + 10;
+    const spiral = angle + radius * 0.022;
+
+    positions[i * 3]     = Math.cos(spiral) * radius + (Math.random() - .5) * 20;
+    positions[i * 3 + 1] = (Math.random() - .5) * 10;
+    positions[i * 3 + 2] = Math.sin(spiral) * radius + (Math.random() - .5) * 20;
+
+    const c = nebulaColors[Math.floor(Math.random() * nebulaColors.length)];
+    colors[i * 3]     = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+
+  const mat = new THREE.PointsMaterial({
+    size: 6,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.18,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true,
+  });
+
+  galaxyGroup.add(new THREE.Points(geo, mat));
+}
+
+// ── Central core glow ────────────────────────────────────────────
+function buildCore() {
+  const coreGeo = new THREE.SphereGeometry(3, 16, 16);
+  const coreMat = new THREE.MeshBasicMaterial({
+    color: 0x00ffcc,
+    transparent: true, opacity: 0.15,
+  });
+  const core = new THREE.Mesh(coreGeo, coreMat);
+  galaxyGroup.add(core);
+
+  // Halo rings
+  for (let i = 0; i < 3; i++) {
+    const ringGeo = new THREE.TorusGeometry(4 + i * 2.5, 0.15, 4, 64);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x00ffcc,
+      transparent: true, opacity: 0.08 - i * 0.02,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    galaxyGroup.add(ring);
+  }
+}
+
+// ── Background distant stars (not in galaxy group) ───────────────
+function buildBackgroundStars() {
+  const positions = new Float32Array(3000 * 3);
+  for (let i = 0; i < 3000; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi   = Math.acos(2 * Math.random() - 1);
+    const r     = 800 + Math.random() * 400;
+    positions[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+    positions[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+    positions[i*3+2] = r * Math.cos(phi);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const mat = new THREE.PointsMaterial({ color: 0x334455, size: 1.2, sizeAttenuation: true });
+  scene.add(new THREE.Points(geo, mat));
+}
+
+// Build everything
+const starMaterial = buildStars();
+buildNebula();
+buildCore();
+buildBackgroundStars();
+
+document.getElementById('stat-stars').textContent = NUM_STARS + NUM_NEBULA;
+
+// ── 3. ANIMATION LOOP ────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+
+  const now     = performance.now();
+  const delta   = (now - state.lastFrameTime) / 1000;
+  state.lastFrameTime = now;
+
+  // FPS counter
+  state.frameCount++;
+  state.fpsTimer += delta;
+  if (state.fpsTimer >= 0.5) {
+    state.fps = Math.round(state.frameCount / state.fpsTimer);
+    state.frameCount = 0;
+    state.fpsTimer = 0;
+    document.getElementById('stat-fps').textContent = state.fps;
+  }
+
+  // Update star twinkle uniform
+  starMaterial.uniforms.uTime.value += delta;
+
+  if (state.handDetected) {
+    // ── Finger-driven rotation ──
+    const dx = (state.fingerX - state.prevFingerX) * FINGER_SENS;
+    const dy = (state.fingerY - state.prevFingerY) * FINGER_SENS;
+
+    rotY += dx;
+    rotX += dy;
+    rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotX)); // clamp tilt
+
+    state.prevFingerX = state.fingerX;
+    state.prevFingerY = state.fingerY;
+  } else {
+    // Auto-spin slowly when no hand
+    rotY += ROTATION_SPEED;
+    state.prevFingerX = state.fingerX;
+    state.prevFingerY = state.fingerY;
+  }
+
+  // Smooth camera zoom
+  camera.position.z += (camZ - camera.position.z) * 0.06;
+
+  // Apply rotation to galaxy group
+  galaxyGroup.rotation.y = rotY;
+  galaxyGroup.rotation.x = rotX;
+
+  renderer.render(scene, camera);
+}
+
+// ── 4. MEDIAPIPE HANDS ───────────────────────────────────────────
+const videoEl    = document.getElementById('videoEl');
+const handCanvas = document.getElementById('handCanvas');
+const handCtx    = handCanvas.getContext('2d');
+
+function resizeHandCanvas() {
+  handCanvas.width  = videoEl.offsetWidth;
+  handCanvas.height = videoEl.offsetHeight;
+}
+
+let handsModel = null;
+
+function initMediaPipe() {
+  handsModel = new Hands({
+    locateFile: (file) =>
+      `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+  });
+
+  handsModel.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 0,      // 0 = fast (good for mobile)
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.6,
+  });
+
+  handsModel.onResults(onHandResults);
+
+  // Use MediaPipe CameraUtils for tablet camera
+  const mpCamera = new Camera(videoEl, {
+    onFrame: async () => {
+      await handsModel.send({ image: videoEl });
+    },
+    width: 320, height: 240,
+    facingMode: 'user',   // front camera
+  });
+
+  mpCamera.start()
+    .then(() => {
+      console.log('Camera started');
+      setTimeout(resizeHandCanvas, 500);
+    })
+    .catch(err => {
+      console.warn('Camera error:', err);
+      showGestureLabel('CAMERA UNAVAILABLE\nUSE TOUCH MODE');
+    });
+}
+
+// Called every frame with landmark results
+function onHandResults(results) {
+  // Clear hand overlay canvas
+  handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+
+  if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+    state.handDetected = true;
+    document.getElementById('stat-hand').textContent = 'ON';
+    document.getElementById('stat-mode').textContent = 'GESTURE';
+
+    const landmarks = results.multiHandLandmarks[0];
+
+    // Draw skeleton on PiP canvas
+    drawConnectors(handCtx, landmarks, HAND_CONNECTIONS,
+      { color: '#00ffcc44', lineWidth: 1 });
+    drawLandmarks(handCtx, landmarks,
+      { color: '#00ffcc', radius: 2, lineWidth: 0 });
+
+    // Index finger tip = landmark #8
+    const tip = landmarks[8];
+    // tip.x and tip.y are [0,1], origin top-left
+    // (mirrored in CSS, so no flip needed for control logic)
+    state.fingerX = tip.x;
+    state.fingerY = tip.y;
+
+    // Show finger dot on screen
+    showFingerDot(tip.x, tip.y);
+
+    // Pinch = thumb tip (#4) + index tip (#8) distance → zoom
+    const thumb = landmarks[4];
+    const pinchDist = Math.hypot(thumb.x - tip.x, thumb.y - tip.y);
+    handlePinch(pinchDist);
+
+    // Gesture detection
+    detectGesture(landmarks);
+
+  } else {
+    state.handDetected = false;
+    document.getElementById('stat-hand').textContent = 'OFF';
+    document.getElementById('stat-mode').textContent = 'FREE';
+    hideFingerDot();
+    state.pinchDistance = null;
+  }
+}
+
+// ── 5. GESTURE LOGIC ────────────────────────────────────────────
+
+const fingerDot = document.getElementById('finger-dot');
+
+function showFingerDot(nx, ny) {
+  fingerDot.style.display = 'block';
+  fingerDot.style.left    = (nx * window.innerWidth)  + 'px';
+  fingerDot.style.top     = (ny * window.innerHeight) + 'px';
+}
+function hideFingerDot() {
+  fingerDot.style.display = 'none';
+}
+
+// Pinch to zoom
+let lastPinchDist = null;
+function handlePinch(dist) {
+  if (lastPinchDist !== null) {
+    const delta = lastPinchDist - dist; // positive = fingers approaching = zoom in
+    camZ += delta * 60 * ZOOM_SPEED;
+    camZ  = Math.max(50, Math.min(400, camZ));
+  }
+  lastPinchDist = dist;
+}
+
+// Gesture names from finger curl pattern
+function detectGesture(lm) {
+  // Tip y < MCP y  →  finger extended (y increases downward in image coords)
+  const indexUp  = lm[8].y  < lm[5].y;
+  const middleUp = lm[12].y < lm[9].y;
+  const ringUp   = lm[16].y < lm[13].y;
+  const pinkyUp  = lm[20].y < lm[17].y;
+  const thumbUp  = lm[4].x  > lm[3].x; // rough thumb check
+
+  const extended = [indexUp, middleUp, ringUp, pinkyUp].filter(Boolean).length;
+
+  let gesture = '';
+  if (extended === 1 && indexUp)        gesture = '☝ POINT · ROTATE';
+  else if (extended === 4)              gesture = '✋ OPEN · SLOW SPIN';
+  else if (extended === 0)              gesture = '✊ FIST · PAUSE';
+  else if (extended === 2 && indexUp && middleUp) gesture = '✌ PEACE';
+  else if (extended >= 3)               gesture = '🤚 WAVE';
+
+  if (gesture) showGestureLabel(gesture, 800);
+}
+
+// ── Gesture label fade ─────────────────────────────────────────
+let gestureLabelTimer = null;
+const gestureLabelEl  = document.getElementById('gesture-label');
+
+function showGestureLabel(text, duration = 1200) {
+  gestureLabelEl.textContent = text;
+  gestureLabelEl.style.opacity = '1';
+  clearTimeout(gestureLabelTimer);
+  gestureLabelTimer = setTimeout(() => {
+    gestureLabelEl.style.opacity = '0';
+  }, duration);
+}
+
+// ── 6. TOUCH FALLBACK ────────────────────────────────────────────
+// If camera fails or user prefers touch, drag still rotates galaxy
+let touchStartX = null, touchStartY = null;
+
+canvas3d.addEventListener('touchstart', e => {
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, { passive: true });
+
+canvas3d.addEventListener('touchmove', e => {
+  if (!state.handDetected && touchStartX !== null) {
+    const dx = (e.touches[0].clientX - touchStartX) / window.innerWidth;
+    const dy = (e.touches[0].clientY - touchStartY) / window.innerHeight;
+    rotY += dx * 3;
+    rotX += dy * 3;
+    rotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotX));
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }
+}, { passive: true });
+
+canvas3d.addEventListener('touchend', () => {
+  touchStartX = null; touchStartY = null;
+}, { passive: true });
+
+// Mouse fallback for desktop testing
+let mouseDown = false, mouseLastX = 0, mouseLastY = 0;
+canvas3d.addEventListener('mousedown', e => { mouseDown = true; mouseLastX = e.clientX; mouseLastY = e.clientY; });
+canvas3d.addEventListener('mouseup',   () => { mouseDown = false; });
+canvas3d.addEventListener('mousemove', e => {
+  if (mouseDown && !state.handDetected) {
+    rotY += (e.clientX - mouseLastX) / window.innerWidth  * 3;
+    rotX += (e.clientY - mouseLastY) / window.innerHeight * 3;
+    rotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotX));
+    mouseLastX = e.clientX; mouseLastY = e.clientY;
+  }
+});
+canvas3d.addEventListener('wheel', e => {
+  camZ += e.deltaY * 0.1;
+  camZ = Math.max(50, Math.min(400, camZ));
+});
+
+// ── 7. APP ENTRY POINT ───────────────────────────────────────────
+function startApp() {
+  document.getElementById('start-screen').style.display = 'none';
+  animate();         // start render loop
+  initMediaPipe();   // start camera + hand tracking
+  showGestureLabel('SYSTEMS ONLINE', 2000);
+}
+</script>
+</body>
+</html>
